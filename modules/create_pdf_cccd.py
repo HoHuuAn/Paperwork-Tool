@@ -1,7 +1,7 @@
 from fpdf import FPDF
+import modules.CCCD as CCCD
 
-
-def create_pdf(images, pdf_output, count=1):
+def create_pdf(images:list, pdf_output:str, count:int):
     pdf = FPDF('P', 'mm', 'A4')
 
     cell_width = pdf.w/2 - 10
@@ -16,14 +16,12 @@ def create_pdf(images, pdf_output, count=1):
             pdf.add_page()
             if image.get_side() == 'front':
                 for index in range(0, quantity_per_page):
-                    # print('front')
                     pdf.set_xy(margin_left + cell_width, margin +
                                index * (cell_height + margin))
                     pdf.image(image.get_path(), w=cell_width, h=cell_height)
 
             elif image.get_side() == 'back':
                 for index in range(0, quantity_per_page):
-                    # print('back')
                     pdf.set_xy(margin, margin + index * (cell_height + margin))
                     pdf.image(image.get_path(), w=cell_width, h=cell_height)
 
