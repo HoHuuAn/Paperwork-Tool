@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import os
-from fpdf import FPDF
 from modules.CCCD import CCCD 
 
 FRONT = cv2.imread('./assets/front.jpg', cv2.IMREAD_GRAYSCALE)
@@ -28,10 +27,10 @@ def process(path: str):
     keypoints1, descriptors1 = orb.detectAndCompute(im1_gray, None)
     keypoints2, descriptors2 = orb.detectAndCompute(im2_gray, None)
 
-    im1_display = cv2.drawKeypoints(im1, keypoints1, outImage=np.array(
-        []), color=(255, 0, 0), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-    im2_display = cv2.drawKeypoints(im2, keypoints2, outImage=np.array(
-        []), color=(255, 0, 0), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    # im1_display = cv2.drawKeypoints(im1, keypoints1, outImage=np.array(
+    #     []), color=(255, 0, 0), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    # im2_display = cv2.drawKeypoints(im2, keypoints2, outImage=np.array(
+    #     []), color=(255, 0, 0), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
     matcher = cv2.DescriptorMatcher_create(
         cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
@@ -49,9 +48,9 @@ def process(path: str):
         points1[i, :] = keypoints1[match.queryIdx].pt
         points2[i, :] = keypoints2[match.trainIdx].pt
 
-    h, mask = cv2.findHomography(points2, points1, cv2.RANSAC)
+    h, _ = cv2.findHomography(points2, points1, cv2.RANSAC)
 
-    height, width, channels = im1.shape
+    height, width, _ = im1.shape
     im2_reg = cv2.warpPerspective(im2, h, (width, height))
 
     file_name = os.path.splitext(os.path.basename(path))[0]
