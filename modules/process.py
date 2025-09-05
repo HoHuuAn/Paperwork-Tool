@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import os
 from modules.CCCD import CCCD
+from modules.google_lens import get_text_from_image, extract_back_id, extract_front_id, extract_id_number
+# USE FOR VERSION 3
 
 FRONT = cv2.imread('./assets/front.jpg', cv2.IMREAD_GRAYSCALE)
 BACK = cv2.imread('./assets/back.jpg', cv2.IMREAD_GRAYSCALE)
@@ -12,102 +14,24 @@ ORB = cv2.ORB_create(MAX_NUM_FEATURES)
 BFMATCHER = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
 
 
-# def process(path: str):
-
-#     side = detect_id_card_side(path)
-#     if (side == "front_1"):
-#         template = FRONT_1
-#     elif (side == "back_1"):
-#         template = BACK_1
-#     elif (side == "front"):
-#         template = FRONT
-#     else:
-#         template = BACK
-#     im1 = cv2.cvtColor(template, cv2.COLOR_BGR2RGB)
-
-#     im2 = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-#     im2 = cv2.cvtColor(im2, cv2.COLOR_BGR2RGB)
-
-#     im1_gray = cv2.cvtColor(im1, cv2.COLOR_RGB2GRAY)
-#     im2_gray = cv2.cvtColor(im2, cv2.COLOR_RGB2GRAY)
-
-#     orb = cv2.ORB_create(MAX_NUM_FEATURES)
-#     keypoints1, descriptors1 = orb.detectAndCompute(im1_gray, None)
-#     keypoints2, descriptors2 = orb.detectAndCompute(im2_gray, None)
-
-#     matcher = cv2.DescriptorMatcher_create(
-#         cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
-#     matches = matcher.match(descriptors1, descriptors2, None)
-
-#     matches = sorted(matches, key=lambda x: x.distance, reverse=False)
-
-#     numGoodMatches = int(len(matches) * 0.1)
-#     matches = matches[:numGoodMatches]
-
-#     points1 = np.zeros((len(matches), 2), dtype=np.float32)
-#     points2 = np.zeros((len(matches), 2), dtype=np.float32)
-
-#     for i, match in enumerate(matches):
-#         points1[i, :] = keypoints1[match.queryIdx].pt
-#         points2[i, :] = keypoints2[match.trainIdx].pt
-
-#     h, _ = cv2.findHomography(points2, points1, cv2.RANSAC)
-
-#     height, width, _ = im1.shape
-#     im2_reg = cv2.warpPerspective(im2, h, (width, height))
-
-#     file_name = os.path.splitext(os.path.basename(path))[0]
-#     directory = os.path.dirname(path)
-
-#     cv2.imwrite(directory + "/" + file_name + "_fix" + ".jpg", im2_reg)
-#     print(CCCD("front" if (side == "front" or side == "front_1")
-#           else "back", path=directory + "/" + file_name + "_fix" + ".jpg"))
-
-#     return CCCD("front" if (side == "front" or side == "front_1") else "back", path=directory + "/" + file_name + "_fix" + ".jpg")
-
-
-# def detect_id_card_side(image_path):
-#     card_image = cv2.imread(image_path,  cv2.IMREAD_GRAYSCALE)
-
-#     des_card = ORB.detectAndCompute(card_image, None)[1]
-
-#     des_front = ORB.detectAndCompute(FRONT, None)[1]
-
-#     des_back = ORB.detectAndCompute(BACK, None)[1]
-
-#     des_front_1 = ORB.detectAndCompute(FRONT_1, None)[1]
-
-#     des_back_1 = ORB.detectAndCompute(BACK_1, None)[1]
-
-#     similarity_scores = {
-#         "front": get_similarity_from_desc(des_card, des_front),
-#         "back": get_similarity_from_desc(des_card, des_back),
-#         "front_1": get_similarity_from_desc(des_card, des_front_1),
-#         "back_1": get_similarity_from_desc(des_card, des_back_1)
-#     }
-#     print(similarity_scores)
-#     print(max(similarity_scores, key=similarity_scores.get))
-#     return max(similarity_scores, key=similarity_scores.get)
-
-
-# def get_similarity_from_desc(search, idx):
-#     matches = BFMATCHER.match(search, idx)
-#     distances = [m.distance for m in matches]
-#     distance = sum(distances) / len(distances)
-#     similarity = 1 / (1 + distance)
-#     return similarity
-
-def process(path: str):
+def process(path: str) -> CCCD | None:
     # 1. Chọn template theo loại mặt
+    id = ""
+    text = get_text_from_image(path)
     side = detect_id_card_side(path)
+    id  = extract_id_number(text)
     if side == "front_1":
         template = FRONT_1
+        # id = extract_front_id(text)
     elif side == "back_1":
         template = BACK_1
+        # id = extract_back_id(text)
     elif side == "front":
         template = FRONT
+        # id = extract_front_id(text)
     else:
         template = BACK
+        # id = extract_back_id(text)
 
     im1 = cv2.cvtColor(template, cv2.COLOR_BGR2RGB)
     im2 = cv2.imread(path, cv2.IMREAD_COLOR)
@@ -140,18 +64,22 @@ def process(path: str):
 
     if len(good_matches) < 4:
         print("Không đủ match tốt để tìm Homography")
-        return None
+        return CCCD("front" if (side == "front" or side == "front_1")
+                  else "back", path=path, id=id, processed=False)
 
     # 6. Lấy toạ độ điểm
-    points1 = np.float32([keypoints1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-    points2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+    points1 = np.float32(
+        [keypoints1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+    points2 = np.float32(
+        [keypoints2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
 
     # 7. Tính homography với RANSAC
     h, mask = cv2.findHomography(points2, points1, cv2.RANSAC, 5.0)
 
     if h is None or mask.sum() < 10:
         print("Homography không đáng tin cậy")
-        return None
+        return CCCD("front" if (side == "front" or side == "front_1")
+                  else "back", path=path, id=id, processed=False)
 
     # 8. Warp ảnh theo homography
     height, width, _ = im1.shape
@@ -165,7 +93,8 @@ def process(path: str):
     cv2.imwrite(out_path, im2_reg)
 
     # 10. Gọi module CCCD
-    result = CCCD("front" if (side == "front" or side == "front_1") else "back", path=out_path)
+    result = CCCD("front" if (side == "front" or side == "front_1")
+                  else "back", path=out_path, id=id, processed=True)
     return result
 
 
