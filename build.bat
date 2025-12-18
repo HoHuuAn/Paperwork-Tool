@@ -1,2 +1,2 @@
 @echo off
-pyinstaller tools.spec
+pyinstaller --onefile --noconsole --icon=icon.ico tools_v3.py

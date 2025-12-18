@@ -2,12 +2,25 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
 from PyQt6 import uic, QtGui
 import sys
 import os
+import logging
+from datetime import datetime
 
 import modules.process as cccd
 import modules.create_pdf_multi_cccd as create_pdf_multi_cccd
 from modules.CCCD import CCCD
 
 CONFIG_FILE = 'path.txt'
+LOG_FILE = 'app.log'
+
+# Setup logging to file - only ERROR and CRITICAL
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 class Tools(QMainWindow):
@@ -55,6 +68,8 @@ class Tools(QMainWindow):
             "Images (*.jpg *.png *.jpeg *.gif)"
         )
         processed_images = []
+        # Clear list_of_images at the start of each process to avoid stale references
+        self.list_of_images = []
         if file_paths:
             self.save_last_path(os.path.dirname(file_paths[-1]))
 
@@ -66,7 +81,11 @@ class Tools(QMainWindow):
 
             # Xử lý ảnh
             for idx, path in enumerate(file_paths):
-                processed_images.append(cccd.process(path))
+                try:
+                    result = cccd.process(path)
+                    processed_images.append(result)
+                except Exception as e:
+                    logger.error(f"Error processing {path}: {str(e)}", exc_info=True)
                 self.progressBar.setValue(idx + 1)
                 QApplication.processEvents()
 
@@ -84,6 +103,7 @@ class Tools(QMainWindow):
 
             # Loại bỏ các cặp mà bất kỳ ảnh nào có processed == False
             error_pairs = []
+            unpaired_ids = []  # IDs with only 1 image (missing front or back)
             filtered_pairs = {}
             for img_id, pair in pairs.items():
                 if len(pair) == 2:
@@ -91,44 +111,60 @@ class Tools(QMainWindow):
                         filtered_pairs[img_id] = pair
                     else:
                         error_pairs.append(img_id)
+                else:
+                    # ID with only 1 image (missing front or back)
+                    unpaired_ids.append(img_id)
             pairs = filtered_pairs
 
             # Thêm từng cặp vào list_of_images
             for img_id in sorted(pairs.keys()):
                 pair = pairs[img_id]
-                if len(pair) == 2:  # Đảm bảo có đủ front và back
-                    self.list_of_images.append(pair)
-                else:
-                    print(
-                        f"Cảnh báo: ID {img_id} không có đủ 2 ảnh (front và back)")
+                self.list_of_images.append(pair)
 
             # Tạo file
-            if create_file_1_page and self.list_of_images and len(self.list_of_images) > 0 and len(self.list_of_images[0]) > 0:
-                create_pdf_multi_cccd.create_pdf_1_page(images=self.list_of_images,
-                                                        pdf_output=os.path.dirname(
-                                                            self.list_of_images[0][0].get_path()) + "/output.pdf",
-                                                        count=int(self.quantity.text()))
-                QMessageBox.information(self, "THÀNH CÔNG", "Hoàn Thành!")
+            if self.list_of_images and len(self.list_of_images) > 0 and len(self.list_of_images[0]) > 0:
+                try:
+                    if create_file_1_page:
+                        output_path = os.path.dirname(self.list_of_images[0][0].get_path()) + "/output.pdf"
+                        create_pdf_multi_cccd.create_pdf_1_page(images=self.list_of_images,
+                                                                pdf_output=output_path,
+                                                                count=int(self.quantity.text()))
+                        QMessageBox.information(self, "THÀNH CÔNG", "Hoàn Thành!")
 
-            if create_file_2_page and self.list_of_images and len(self.list_of_images) > 0 and len(self.list_of_images[0]) > 0:
-                create_pdf_multi_cccd.create_pdf_2_page(images=self.list_of_images,
-                                                        pdf_output=os.path.dirname(
-                                                            self.list_of_images[0][0].get_path()) + "/output.pdf",
-                                                        count=int(self.quantity.text()))
-                QMessageBox.information(self, "THÀNH CÔNG", "Hoàn Thành!")
+                    if create_file_2_page:
+                        output_path = os.path.dirname(self.list_of_images[0][0].get_path()) + "/output.pdf"
+                        create_pdf_multi_cccd.create_pdf_2_page(images=self.list_of_images,
+                                                                pdf_output=output_path,
+                                                                count=int(self.quantity.text()))
+                        QMessageBox.information(self, "THÀNH CÔNG", "Hoàn Thành!")
+                except Exception as e:
+                    QMessageBox.critical(self, "LỖI", f"Lỗi tạo PDF: {str(e)}")
+            else:
+                # No valid pairs found - show error
+                QMessageBox.warning(self, "CẢNH BÁO", "Không tìm thấy cặp ảnh hợp lệ nào!")
 
-            # Xóa ảnh đã xử lý
-            for image in processed_images:
-                os.remove(image.get_path())
+            # Không xóa ảnh đã xử lý - giữ lại để kiểm tra
+            # for image in processed_images:
+            #     os.remove(image.get_path())
             processed_images.clear()
 
             # Đặt progressBar về 0 khi xong
             self.progressBar.setValue(0)
             QApplication.processEvents()
 
+            # Show errors if any
+            error_messages = []
             if error_pairs:
-                QMessageBox.critical(
-                    self, "THẤT BẠI", f"Các ID lỗi: {', '.join(str(i) for i in error_pairs)}")
+                msg = f"Các ID lỗi xử lý: {', '.join(str(i) for i in error_pairs)}"
+                error_messages.append(msg)
+                logger.error(msg)
+            if unpaired_ids:
+                msg = f"Các ID thiếu mặt trước/sau: {', '.join(str(i) for i in unpaired_ids)}"
+                error_messages.append(msg)
+                logger.error(msg)
+            
+            if error_messages:
+                QMessageBox.critical(self, "THẤT BẠI", "\n".join(error_messages))
 
 
 if __name__ == '__main__':

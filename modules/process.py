@@ -1,9 +1,12 @@
 import cv2
 import numpy as np
 import os
+import logging
 from modules.CCCD import CCCD
 from modules.google_lens import get_text_from_image, extract_back_id, extract_front_id, extract_id_number
 # USE FOR VERSION 3
+
+logger = logging.getLogger(__name__)
 
 FRONT = cv2.imread('./assets/front.jpg', cv2.IMREAD_GRAYSCALE)
 BACK = cv2.imread('./assets/back.jpg', cv2.IMREAD_GRAYSCALE)
@@ -20,6 +23,9 @@ def process(path: str) -> CCCD | None:
     text = get_text_from_image(path)
     side = detect_id_card_side(path)
     id  = extract_id_number(text)
+    # logger.debug(f"Path: {os.path.basename(path)}")
+    # logger.debug(f"Side detected: {side}")
+    # logger.debug(f"ID extracted: '{id}'")
     if side == "front_1":
         template = FRONT_1
         # id = extract_front_id(text)
@@ -46,8 +52,9 @@ def process(path: str) -> CCCD | None:
     keypoints2, descriptors2 = sift.detectAndCompute(im2_gray, None)
 
     if descriptors1 is None or descriptors2 is None:
-        print("Không tìm thấy đặc trưng nào")
-        return None
+        logger.error(f"Không tìm thấy đặc trưng nào: {path}")
+        return CCCD("front" if (side == "front" or side == "front_1")
+                  else "back", path=path, id=id, processed=False)
 
     # 4. FLANN matcher cho float descriptors
     index_params = dict(algorithm=1, trees=5)   # KD-Tree

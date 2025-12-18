@@ -347,25 +347,37 @@ def extract_id_number(text):
     if not text:
         return ""
 
-    # Patterns for front and back
+    # Normalize: remove spaces around < and << (OCR often adds spaces)
+    normalized_text = re.sub(r'\s*<\s*', '<', text)
+    
+    # Try splitting by '<<' FIRST for back side MRZ (more reliable)
+    # MRZ format: IDVNM0990089616089099008961<<9
+    # The ID is the last 12 digits before <<
+    parts = normalized_text.split("<<")
+    if len(parts) > 1:  # Has << separator (back side MRZ)
+        candidate = parts[0]
+        match = re.search(r'(\d{12})$', candidate)
+        if match:
+            return match.group(1)
+    
+    # Also try with < (single) in case OCR misreads <<
+    parts_single = normalized_text.split("<")
+    if len(parts_single) > 1:
+        candidate = parts_single[0]
+        match = re.search(r'(\d{12})$', candidate)
+        if match:
+            return match.group(1)
+
+    # Patterns for front side
     patterns = [
         r'(?:Số định danh cá nhân|Personal identification number)\s*(\d{12})',
         r'(?:Số\s*/\s*No\s*\.?\s*:?)\s*(\d{12})',
         r'\b(\d{12})\b',
-        r'(\d{12})$'  # For back side, last 12 digits before <<
     ]
 
     # Try all patterns
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-    # Try splitting by '<<' and get last 12 digits before it
-    parts = text.split("<<")
-    if parts:
-        candidate = parts[0]
-        match = re.search(r'(\d{12})$', candidate)
         if match:
             return match.group(1)
 
