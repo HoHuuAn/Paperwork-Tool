@@ -3,11 +3,10 @@ from PyQt6 import uic, QtGui
 import sys
 import os
 import logging
-from datetime import datetime
 
+from common.ulti import build_image_pairs
 import modules.process as cccd
 import modules.create_pdf_multi_cccd as create_pdf_multi_cccd
-from modules.CCCD import CCCD
 
 CONFIG_FILE = 'path.txt'
 LOG_FILE = 'app.log'
@@ -83,43 +82,15 @@ class Tools(QMainWindow):
             for idx, path in enumerate(file_paths):
                 try:
                     result = cccd.process(path)
-                    processed_images.append(result)
+                    if result is not None:
+                        processed_images.append(result)
                 except Exception as e:
                     logger.error(f"Error processing {path}: {str(e)}", exc_info=True)
                 self.progressBar.setValue(idx + 1)
                 QApplication.processEvents()
 
-            # Sắp xếp ảnh: luôn để ảnh 'front' trước 'back' nếu cùng id
-            processed_images.sort(key=lambda img: (
-                img.get_id(), 0 if img.get_side() == 'front' else 1))
-
-            # Nhóm ảnh thành các cặp dựa trên ID
-            pairs = {}
-            for img in processed_images:
-                img_id = img.get_id()
-                if img_id not in pairs:
-                    pairs[img_id] = []
-                pairs[img_id].append(img)
-
-            # Loại bỏ các cặp mà bất kỳ ảnh nào có processed == False
-            error_pairs = []
-            unpaired_ids = []  # IDs with only 1 image (missing front or back)
-            filtered_pairs = {}
-            for img_id, pair in pairs.items():
-                if len(pair) == 2:
-                    if all(getattr(img, 'processed', True) for img in pair):
-                        filtered_pairs[img_id] = pair
-                    else:
-                        error_pairs.append(img_id)
-                else:
-                    # ID with only 1 image (missing front or back)
-                    unpaired_ids.append(img_id)
-            pairs = filtered_pairs
-
-            # Thêm từng cặp vào list_of_images
-            for img_id in sorted(pairs.keys()):
-                pair = pairs[img_id]
-                self.list_of_images.append(pair)
+            # Pair all detected fronts/backs, including repeated or unreadable IDs.
+            self.list_of_images, error_pairs, unpaired_ids = build_image_pairs(processed_images)
 
             # Tạo file
             if self.list_of_images and len(self.list_of_images) > 0 and len(self.list_of_images[0]) > 0:

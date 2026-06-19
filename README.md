@@ -26,7 +26,7 @@ python tools_v3.py
 Ứng dụng hỗ trợ build bằng PyInstaller. Chạy lệnh sau:
 
 ```powershell
-pyinstaller --onefile --windowed --icon=icon.ico tools_v3.py
+pyinstaller --clean --noconfirm tools_v3.spec
 ```
 
 Hoặc sử dụng file batch có sẵn:

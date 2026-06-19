@@ -3,3 +3,4 @@ dist/*
 test/*
 notebook/paper/*
 command.txt
+*.pyc
